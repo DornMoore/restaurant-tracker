@@ -1,0 +1,31 @@
+# PowerSync Sync Streams config — deployed via the PowerSync dashboard's
+# "Sync Streams" editor (paste this file's contents in, Validate, Deploy).
+# Docs: https://docs.powersync.com/usage/sync-streams
+#
+# This supersedes the older bucket_definitions "Sync Rules" format (this
+# file used to be named sync-rules.yaml — renamed to match). New PowerSync
+# instances default to the Sync Streams editor now, and it's the one that
+# actually needs deploying for the sync service to have any config at all
+# (an empty/default Sync Streams config causes PSYNC_S2302 "No sync config
+# available", even if the legacy Sync Rules editor elsewhere has something
+# in it).
+#
+# Both accounts see everything — no per-user partitioning, matching
+# PRD.md "Who uses it" ("no fancy permissions needed"). auto_subscribe: true
+# means every connected client gets all of this without any explicit
+# subscribe call in the app code.
+config:
+  edition: 3
+
+streams:
+  restaurants:
+    auto_subscribe: true
+    query: SELECT * FROM restaurants
+
+  visits:
+    auto_subscribe: true
+    query: SELECT * FROM visits
+
+  tags:
+    auto_subscribe: true
+    query: SELECT * FROM tags

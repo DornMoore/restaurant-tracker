@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+/* Card-based, "personal guide" feel rather than a data-entry form —
+   see PRD.md "Visual direction". Keep global overrides minimal; prefer
+   Tailwind utility classes in components over growing this file. */
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+}

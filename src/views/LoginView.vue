@@ -19,7 +19,7 @@ async function submit() {
   error.value = null
   try {
     await auth.login(email.value, password.value)
-    router.push({ name: 'been-there' })
+    router.push({ name: 'restaurants' })
   } catch (e: any) {
     error.value = e.message ?? 'Could not sign in.'
   } finally {

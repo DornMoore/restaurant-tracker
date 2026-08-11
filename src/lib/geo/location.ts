@@ -61,6 +61,24 @@ export function distanceMiles(a: Coordinates, b: Coordinates): number {
   return 2 * R * Math.asin(Math.sqrt(h))
 }
 
+/** Best-effort city extraction from `location_label` (no structured city
+ * column exists — see schema.ts). Mapbox's full_address/place_formatted
+ * strings are comma-separated, typically "Street, City, State Zip, Country"
+ * — city sits three segments from the end when a street is present, or the
+ * first segment for a shorter "City, State" label. This is a heuristic, not
+ * a guaranteed-correct parse: manually-typed addresses can be in any shape,
+ * and it will occasionally be wrong for unusual formats. */
+export function cityFromLocationLabel(label: string | null | undefined): string | null {
+  if (!label) return null
+  const parts = label
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean)
+  if (parts.length >= 3) return parts[parts.length - 3]
+  if (parts.length === 2) return parts[0]
+  return null
+}
+
 /** A rough (lng/lat, not geodesic-precise) bounding box `radiusMiles` around
  * `center` — good enough for framing an initial map view. Longitude degrees
  * shrink toward the poles, so it's scaled by latitude; a fixed 69 mi/degree

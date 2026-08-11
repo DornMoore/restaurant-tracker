@@ -28,6 +28,19 @@ const restaurants = new Table({
   // Free text, written by us — Mapbox only gives a category, not a real
   // description. See PRD.md follow-up.
   description: column.text,
+  // Manual overrides for the Yelp/TripAdvisor hand-off links — their search
+  // URLs (see lib/geo/location.ts) don't always land on the right page.
+  // When set, used instead of the generated search link. See PRD.md
+  // follow-up.
+  yelp_url: column.text,
+  tripadvisor_url: column.text,
+  // Public URL into the `restaurant-photos` Supabase Storage bucket — see
+  // supabase/migrations/0007_restaurant_photos.sql. A plain permanent URL
+  // (not a signed one) so it syncs through PowerSync like any other text
+  // column; PowerSync only syncs structured rows, never blobs, so the
+  // actual image upload happens directly against Storage (src/lib/
+  // photoUpload.ts) and only this URL comes back through the sync queue.
+  photo_url: column.text,
   created_at: column.text, // ISO 8601
   updated_at: column.text, // ISO 8601
 })

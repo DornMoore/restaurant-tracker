@@ -1,17 +1,20 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useQuery, usePowerSync } from '@powersync/vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useQuery, usePowerSync, useStatus } from '@powersync/vue'
 import { useRouter } from 'vue-router'
 import LocationPicker from '../components/LocationPicker.vue'
 import RestaurantMap from '../components/RestaurantMap.vue'
 import StarRating from '../components/StarRating.vue'
-import { appleMapsUrl, googleMapsUrl, tripAdvisorUrl, yelpUrl, type Coordinates } from '../lib/geo/location'
+import { appleMapsUrl, distanceMiles, getCurrentPosition, googleMapsUrl, tripAdvisorUrl, yelpUrl, type Coordinates } from '../lib/geo/location'
+import { drivingInfo } from '../lib/mapbox/directions'
 import { CUISINE_OPTIONS } from '../lib/cuisines'
+import { uploadRestaurantPhoto } from '../lib/photoUpload'
 import type { RestaurantRecord, VisitRecord, TagRecord } from '../lib/powersync/schema'
 
 const props = defineProps<{ id: string }>()
 const powerSync = usePowerSync()
 const router = useRouter()
+const status = useStatus()
 
 const { data: restaurantRows } = useQuery<RestaurantRecord>(
   `SELECT * FROM restaurants WHERE id = ?`,
@@ -29,8 +32,16 @@ const appleUrl = computed(() =>
       : null,
   ),
 )
-const yelpLink = computed(() => restaurant.value && yelpUrl(restaurant.value.name ?? '', restaurant.value.location_label))
-const tripAdvisorLink = computed(() => restaurant.value && tripAdvisorUrl(restaurant.value.name ?? '', restaurant.value.location_label))
+// Manual overrides win — their generated search links don't always land on
+// the right page (confirmed in testing). See PRD.md follow-up.
+const yelpLink = computed(
+  () => restaurant.value?.yelp_url || (restaurant.value && yelpUrl(restaurant.value.name ?? '', restaurant.value.location_label)),
+)
+const tripAdvisorLink = computed(
+  () =>
+    restaurant.value?.tripadvisor_url ||
+    (restaurant.value && tripAdvisorUrl(restaurant.value.name ?? '', restaurant.value.location_label)),
+)
 
 const { data: visits } = useQuery<VisitRecord>(
   `SELECT * FROM visits WHERE restaurant_id = ? ORDER BY visit_date DESC`,
@@ -45,7 +56,7 @@ const { data: restaurantTags } = useQuery<TagRecord>(
 // Single-pin map + hand-off links — no in-app routing, just "here's where
 // it is" and a tap out to whichever maps app handles the rest. See PRD.md
 // "Key flows" / "Location". Colored the same way as everywhere else — see
-// src/lib/ratingColor.ts — using the same visits already loaded below.
+// src/lib/statusColor.ts — using the same visits already loaded below.
 const avgRating = computed(() => {
   const rated = visits.value.filter((v) => v.rating != null)
   return rated.length ? rated.reduce((sum, v) => sum + (v.rating ?? 0), 0) / rated.length : null
@@ -53,9 +64,66 @@ const avgRating = computed(() => {
 const mostRecentWouldntGoBack = computed(() => !!visits.value[0]?.wouldnt_go_back)
 const mapPlaces = computed(() =>
   restaurant.value
-    ? [{ ...restaurant.value, name: restaurant.value.name ?? '', avg_rating: avgRating.value, wouldntGoBack: mostRecentWouldntGoBack.value }]
+    ? [
+        {
+          ...restaurant.value,
+          name: restaurant.value.name ?? '',
+          status: restaurant.value.status ?? 'been_there',
+          avg_rating: avgRating.value,
+          wouldntGoBack: mostRecentWouldntGoBack.value,
+        },
+      ]
     : [],
 )
+
+// Always know how far away this place is, without asking — see PRD.md
+// follow-up ("by default, let's always get the current location"). Driving
+// time (via Mapbox Directions) is the useful number; straight-line distance
+// is what we show while that's loading or if the Directions call fails —
+// still better than nothing, and it's what was here before this.
+const userLocation = ref<Coordinates | null>(null)
+const driving = ref<{ distanceMiles: number; durationMinutes: number } | null>(null)
+const straightLineMiles = ref<number | null>(null)
+const distanceLoading = ref(false)
+
+onMounted(async () => {
+  try {
+    userLocation.value = await getCurrentPosition()
+  } catch {
+    // No location available (denied/unsupported) — distanceText just won't show.
+  }
+})
+
+watch(
+  [userLocation, restaurant],
+  async ([here, r]) => {
+    driving.value = null
+    straightLineMiles.value = null
+    if (!here || !r || r.latitude == null || r.longitude == null) return
+
+    const dest = { latitude: r.latitude, longitude: r.longitude }
+    straightLineMiles.value = distanceMiles(here, dest)
+
+    distanceLoading.value = true
+    try {
+      driving.value = await drivingInfo(here, dest)
+    } catch {
+      driving.value = null // straightLineMiles is still shown below
+    } finally {
+      distanceLoading.value = false
+    }
+  },
+  { immediate: true },
+)
+
+const distanceText = computed(() => {
+  if (driving.value) {
+    return `${Math.round(driving.value.durationMinutes)} min drive (${driving.value.distanceMiles.toFixed(1)} mi)`
+  }
+  if (distanceLoading.value) return 'Checking drive time…'
+  if (straightLineMiles.value != null) return `${straightLineMiles.value.toFixed(1)} mi away (straight-line)`
+  return null
+})
 
 // --- Log a visit ---
 // A restaurant can rack up any number of visits over time — see PRD.md
@@ -155,6 +223,8 @@ const editDescription = ref('')
 const editLocationLabel = ref('')
 const editWebsite = ref('')
 const editPhone = ref('')
+const editYelpUrl = ref('')
+const editTripAdvisorUrl = ref('')
 const editCoords = ref<Coordinates | null>(null)
 
 function startEditRestaurant() {
@@ -177,6 +247,8 @@ function startEditRestaurant() {
   editLocationLabel.value = restaurant.value.location_label ?? ''
   editWebsite.value = restaurant.value.website ?? ''
   editPhone.value = restaurant.value.phone ?? ''
+  editYelpUrl.value = restaurant.value.yelp_url ?? ''
+  editTripAdvisorUrl.value = restaurant.value.tripadvisor_url ?? ''
   editCoords.value =
     restaurant.value.latitude != null && restaurant.value.longitude != null
       ? { latitude: restaurant.value.latitude, longitude: restaurant.value.longitude }
@@ -195,7 +267,7 @@ async function saveRestaurant() {
   await powerSync.value.execute(
     `UPDATE restaurants
      SET name = ?, cuisine = ?, price_tier = ?, description = ?, location_label = ?,
-         website = ?, phone = ?, latitude = ?, longitude = ?, updated_at = ?
+         website = ?, phone = ?, yelp_url = ?, tripadvisor_url = ?, latitude = ?, longitude = ?, updated_at = ?
      WHERE id = ?`,
     [
       editName.value.trim(),
@@ -205,6 +277,8 @@ async function saveRestaurant() {
       editLocationLabel.value.trim() || null,
       editWebsite.value.trim() || null,
       editPhone.value.trim() || null,
+      editYelpUrl.value.trim() || null,
+      editTripAdvisorUrl.value.trim() || null,
       editCoords.value?.latitude ?? null,
       editCoords.value?.longitude ?? null,
       new Date().toISOString(),
@@ -212,6 +286,31 @@ async function saveRestaurant() {
     ],
   )
   editingRestaurant.value = false
+}
+
+// --- Photo upload ---
+// Fires immediately on file selection, independent of the edit form's Save/
+// Cancel — see src/lib/photoUpload.ts. Disabled while offline: the upload
+// goes straight to Supabase Storage (PowerSync only syncs structured rows,
+// never blobs), so there's nothing to queue for later like every other
+// write in this app.
+const uploadingPhoto = ref(false)
+const photoUploadError = ref<string | null>(null)
+
+async function onPhotoSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  uploadingPhoto.value = true
+  photoUploadError.value = null
+  try {
+    await uploadRestaurantPhoto(powerSync.value, props.id, file)
+  } catch (err: any) {
+    photoUploadError.value = err.message ?? 'Could not upload photo.'
+  } finally {
+    uploadingPhoto.value = false
+    input.value = ''
+  }
 }
 
 // --- Delete the restaurant ---
@@ -227,13 +326,13 @@ async function deleteRestaurant() {
   await powerSync.value.execute(`DELETE FROM tags WHERE restaurant_id = ?`, [props.id])
   await powerSync.value.execute(`DELETE FROM visits WHERE restaurant_id = ?`, [props.id])
   await powerSync.value.execute(`DELETE FROM restaurants WHERE id = ?`, [props.id])
-  router.push({ name: restaurant.value?.status === 'want_to_try' ? 'want-to-try' : 'been-there' })
+  router.push({ name: 'restaurants' })
 }
 </script>
 
 <template>
   <div v-if="restaurant" class="mx-auto max-w-2xl px-4 py-6">
-    <RouterLink :to="{ name: restaurant.status === 'want_to_try' ? 'want-to-try' : 'been-there' }" class="text-sm text-zinc-500">
+    <RouterLink :to="{ name: 'restaurants' }" class="text-sm text-zinc-500">
       ← Back
     </RouterLink>
 
@@ -244,10 +343,27 @@ async function deleteRestaurant() {
       </button>
     </div>
 
+    <img v-if="restaurant.photo_url" :src="restaurant.photo_url" :alt="restaurant.name ?? ''" class="mt-3 h-48 w-full rounded-xl object-cover" />
+
+    <div class="mt-2 flex items-center gap-2 text-sm">
+      <label
+        class="cursor-pointer text-zinc-500 underline decoration-dotted"
+        :class="{ 'cursor-not-allowed opacity-50': !status.connected || uploadingPhoto }"
+      >
+        {{ uploadingPhoto ? 'Uploading…' : restaurant.photo_url ? 'Replace photo' : 'Add a photo' }}
+        <input type="file" accept="image/*" class="hidden" :disabled="!status.connected || uploadingPhoto" @change="onPhotoSelected" />
+      </label>
+      <span v-if="!status.connected" class="text-xs text-zinc-400">(needs a connection)</span>
+    </div>
+    <p v-if="photoUploadError" class="mt-1 text-sm text-red-500">{{ photoUploadError }}</p>
+
     <template v-if="!editingRestaurant">
       <p class="text-sm text-zinc-500">
         <span v-if="restaurant.cuisine">{{ restaurant.cuisine }} · </span>
         <span v-if="restaurant.price_tier">{{ restaurant.price_tier }}</span>
+        <span v-if="distanceText">
+          <span v-if="restaurant.cuisine || restaurant.price_tier"> · </span>{{ distanceText }}
+        </span>
       </p>
       <p v-if="restaurant.description" class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{{ restaurant.description }}</p>
 
@@ -282,7 +398,7 @@ async function deleteRestaurant() {
         <a :href="tripAdvisorLink ?? undefined" target="_blank" rel="noopener" class="text-blue-600 underline">Open in TripAdvisor</a>
       </div>
 
-      <RestaurantMap class="mt-4" :restaurants="mapPlaces" />
+      <RestaurantMap class="mt-4" :restaurants="mapPlaces" single-pin />
     </template>
 
     <div v-else class="mt-3 space-y-3">
@@ -336,6 +452,21 @@ async function deleteRestaurant() {
         v-model="editPhone"
         type="text"
         placeholder="Phone"
+        class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+      />
+
+      <!-- The generated search links (see lib/geo/location.ts) don't always
+           land on the right page — these override them when set. -->
+      <input
+        v-model="editYelpUrl"
+        type="text"
+        placeholder="Yelp URL (optional — overrides the search link)"
+        class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+      />
+      <input
+        v-model="editTripAdvisorUrl"
+        type="text"
+        placeholder="TripAdvisor URL (optional — overrides the search link)"
         class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
       />
 

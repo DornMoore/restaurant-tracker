@@ -3,17 +3,15 @@ import { createRouter, createWebHistory } from 'vue-router'
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/been-there' },
+    { path: '/', redirect: '/restaurants' },
     {
-      path: '/been-there',
-      name: 'been-there',
-      component: () => import('../views/BeenThereView.vue'),
+      path: '/restaurants',
+      name: 'restaurants',
+      component: () => import('../views/RestaurantsView.vue'),
     },
-    {
-      path: '/want-to-try',
-      name: 'want-to-try',
-      component: () => import('../views/WantToTryView.vue'),
-    },
+    // Old two-page split — kept as redirects in case either was bookmarked.
+    { path: '/been-there', redirect: '/restaurants' },
+    { path: '/want-to-try', redirect: '/restaurants' },
     {
       path: '/log-visit',
       name: 'log-visit',

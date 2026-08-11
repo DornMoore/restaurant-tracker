@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Restaurant Tracker</title>
+    <script>
+      // Sets the dark class before first paint, so there's no flash of the
+      // wrong theme. Mirrors the resolution logic in src/stores/theme.ts —
+      // keep the two in sync if that logic ever changes.
+      (function () {
+        var saved = localStorage.getItem('restaurant-tracker:theme')
+        var dark = saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        if (dark) document.documentElement.classList.add('dark')
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

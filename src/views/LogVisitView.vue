@@ -91,7 +91,7 @@ async function save() {
 
 <template>
   <div class="mx-auto max-w-2xl px-4 py-6">
-    <RouterLink :to="{ name: 'been-there' }" class="text-sm text-zinc-500">← Back</RouterLink>
+    <RouterLink :to="{ name: 'restaurants' }" class="text-sm text-zinc-500">← Back</RouterLink>
     <h1 class="mt-2 mb-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Log a visit</h1>
 
     <div v-if="!picked">

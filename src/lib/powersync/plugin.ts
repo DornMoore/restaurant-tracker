@@ -16,6 +16,13 @@ export const powerSync = new PowerSyncDatabase({
 // available in every component without prop-drilling the database instance.
 export const powerSyncPlugin = createPowerSyncPlugin({ database: powerSync })
 
+// Starts the moment this module loads (a plain Supabase Auth getSession()
+// call — no dependency on the local PowerSync DB), not just once App.vue
+// mounts. The router's global auth guard (see src/router/index.ts) awaits
+// this once before deciding whether a session exists, so "is anyone signed
+// in" is known before any protected route is allowed to resolve.
+export const authReady = supabaseConnector.init()
+
 /**
  * Call once on app mount (see App.vue). Starts the local database, then
  * connects the sync stream using the Supabase connector for auth + upload.
@@ -24,6 +31,6 @@ export const powerSyncPlugin = createPowerSyncPlugin({ database: powerSync })
  */
 export async function initPowerSync() {
   await powerSync.init()
-  await supabaseConnector.init()
+  await authReady
   await powerSync.connect(supabaseConnector)
 }

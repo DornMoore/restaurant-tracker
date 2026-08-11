@@ -15,6 +15,7 @@ import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { boundingBoxMiles, getCurrentPosition, type Coordinates } from '../lib/geo/location'
 import { BASE_MAP_STYLES, styleForTheme } from '../lib/mapbox/baseStyles'
+import { createDotElement } from '../lib/mapbox/dotMarker'
 import { restaurantStatus, statusHex } from '../lib/statusColor'
 import { useThemeStore } from '../stores/theme'
 
@@ -185,61 +186,8 @@ const displayedRestaurants = computed(() => {
 })
 
 // --- Markers ---
-// Plain colored dots rather than pin icons — the "your location" blue dot
-// familiar from Google Maps, extended to restaurants (colored by rating
-// tier instead of all-blue). See PRD.md follow-up. A pin's pointed tip
-// implies "exactly here"; LocationPicker (which is about placing an exact
-// point) keeps the default pin for that reason — this is a browsing view.
-function createDotElement(color: string, opts: { size?: number; halo?: boolean; borderColor?: string } = {}): HTMLDivElement {
-  const size = opts.size ?? 14
-  // Mapbox repositions THIS element (`el`) via el.style.transform on every
-  // pan/zoom frame — it must never be touched by our own transform/
-  // transition, or every Mapbox-driven position update gets animated
-  // through whatever transition we left behind instead of snapping
-  // instantly, which looks like the marker drifting/swimming while
-  // zooming. All hover-scale styling below happens on `inner` instead,
-  // which Mapbox never touches. See PRD.md follow-up.
-  const el = document.createElement('div')
-  // No position set here — Mapbox's own .mapboxgl-marker CSS class already
-  // sets position:absolute on this element; setting it again inline was
-  // redundant at best, and inline styles beat class rules, so it risked
-  // fighting Mapbox for a property this element doesn't own.
-  el.style.width = `${size}px`
-  el.style.height = `${size}px`
-
-  const inner = document.createElement('div')
-  inner.dataset.markerInner = 'true'
-  inner.style.position = 'relative'
-  inner.style.width = '100%'
-  inner.style.height = '100%'
-  inner.style.transition = 'transform 0.1s ease-out'
-  el.appendChild(inner)
-
-  if (opts.halo) {
-    const halo = document.createElement('div')
-    halo.style.position = 'absolute'
-    halo.style.inset = `-${Math.round(size * 0.7)}px`
-    halo.style.borderRadius = '50%'
-    halo.style.backgroundColor = color
-    halo.style.opacity = '0.25'
-    inner.appendChild(halo)
-  }
-
-  const dot = document.createElement('div')
-  dot.style.position = 'absolute'
-  dot.style.inset = '0'
-  dot.style.borderRadius = '50%'
-  dot.style.backgroundColor = color
-  // A white fill needs a dark outline or it vanishes against a light
-  // basemap — every other color keeps the original white ring, which reads
-  // as a halo against the map rather than a border. See src/lib/
-  // statusColor.ts (the want-to-try state is pure white).
-  dot.style.border = `2px solid ${opts.borderColor ?? 'white'}`
-  dot.style.boxShadow = '0 1px 3px rgba(0,0,0,0.45)'
-  inner.appendChild(dot)
-
-  return el
-}
+// createDotElement lives in lib/mapbox/dotMarker.ts — shared with
+// LocationPicker.vue so every map in the app uses the same marker look.
 
 function renderMarkers() {
   if (!map) return
@@ -253,11 +201,18 @@ function renderMarkers() {
   hereMarker = null
 
   for (const r of props.restaurants.filter(located)) {
+    // Mapbox's popup bubble background is hardcoded white (its own CSS,
+    // not ours — see mapbox-gl.css .mapboxgl-popup-content) regardless of
+    // the app's light/dark theme, and sets no text color of its own. An
+    // un-colored element here would inherit whatever the ambient dark-mode
+    // text color is (white), landing white-on-white and disappearing
+    // entirely — confirmed as the actual bug, not a hypothetical. Every
+    // text element below gets an explicit, theme-independent dark color.
     const popupNode = document.createElement('div')
-    popupNode.className = 'text-sm'
+    popupNode.className = 'text-sm text-zinc-900'
     popupNode.innerHTML = `
       ${r.photo_url ? `<img src="${escapeHtml(r.photo_url)}" alt="" class="mb-1.5 h-20 w-full rounded-md object-cover" />` : ''}
-      <div class="font-medium">${escapeHtml(r.name)}</div>
+      <div class="font-medium text-zinc-900">${escapeHtml(r.name)}</div>
       <div class="text-zinc-500">
         ${r.wouldntGoBack ? "Wouldn't go back" : r.avg_rating != null ? '★'.repeat(Math.round(r.avg_rating)) + ' · ' : r.status === 'want_to_try' ? 'Want to try · ' : ''}${r.price_tier ?? ''}
       </div>
@@ -280,7 +235,15 @@ function renderMarkers() {
     // shows a lightweight name-only tooltip — separate from the click
     // popup above, so it doesn't carry the photo/rating/link along too.
     // Removed on click so it doesn't linger underneath the real popup.
-    const tooltip = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 10 }).setText(r.name)
+    // setDOMContent (not setText) so an explicit text color can be set —
+    // see the comment above popupNode: Mapbox's popup background is
+    // hardcoded white regardless of theme, and .setText()'s plain text
+    // node has no element to attach a color to, so it inherited the
+    // ambient dark-mode white text color and disappeared.
+    const tooltipNode = document.createElement('div')
+    tooltipNode.className = 'text-sm text-zinc-900'
+    tooltipNode.textContent = r.name
+    const tooltip = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 10 }).setDOMContent(tooltipNode)
     const markerEl = marker.getElement()
     markerEl.addEventListener('mouseenter', () => {
       if (map) tooltip.setLngLat([r.longitude, r.latitude]).addTo(map)

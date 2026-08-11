@@ -11,6 +11,8 @@ import type { PickedRestaurant } from '../lib/logVisit'
 
 type ExistingMatch = { id: string; name: string; status: string; last_visit_date: string | null }
 
+const props = withDefaults(defineProps<{ placeholder?: string }>(), { placeholder: 'Restaurant name…' })
+
 const emit = defineEmits<{ pick: [PickedRestaurant] }>()
 
 const powerSync = usePowerSync()
@@ -115,7 +117,7 @@ onBeforeUnmount(() => clearTimeout(debounceHandle))
     <input
       v-model="query"
       type="text"
-      placeholder="Restaurant name…"
+      :placeholder="props.placeholder"
       class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
       @input="onInput"
       @keydown="onKeydown"

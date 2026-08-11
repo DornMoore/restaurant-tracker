@@ -29,3 +29,7 @@ streams:
   tags:
     auto_subscribe: true
     query: SELECT * FROM tags
+
+  review_links:
+    auto_subscribe: true
+    query: SELECT * FROM review_links

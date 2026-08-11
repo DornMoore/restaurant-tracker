@@ -3,14 +3,18 @@
 // the Mapbox search lookup didn't find it (or found the wrong branch). See
 // PRD.md follow-up: "add in the other information, like the coordinates on
 // a map."
-import { onBeforeUnmount, onMounted, useTemplateRef } from 'vue'
+import { onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { getCurrentPosition, type Coordinates } from '../lib/geo/location'
+import { styleForTheme } from '../lib/mapbox/baseStyles'
+import { createDotElement } from '../lib/mapbox/dotMarker'
+import { useThemeStore } from '../stores/theme'
 
 const props = defineProps<{ modelValue: Coordinates | null }>()
 const emit = defineEmits<{ 'update:modelValue': [Coordinates] }>()
 
+const themeStore = useThemeStore()
 const containerRef = useTemplateRef<HTMLDivElement>('container')
 let map: mapboxgl.Map | null = null
 let marker: mapboxgl.Marker | null = null
@@ -18,7 +22,10 @@ let marker: mapboxgl.Marker | null = null
 function placeMarker(coords: Coordinates, recenter: boolean) {
   if (!map) return
   if (!marker) {
-    marker = new mapboxgl.Marker({ color: '#18181b', draggable: true })
+    // Same dot marker as everywhere else in the app (see
+    // lib/mapbox/dotMarker.ts) — was Mapbox's default pin, which looked
+    // inconsistent next to the browsing/detail maps' colored dots.
+    marker = new mapboxgl.Marker({ element: createDotElement('#18181b', { size: 16 }), draggable: true })
       .setLngLat([coords.longitude, coords.latitude])
       .addTo(map)
     marker.on('dragend', () => {
@@ -43,7 +50,12 @@ onMounted(() => {
 
   map = new mapboxgl.Map({
     container: containerRef.value!,
-    style: 'mapbox://styles/mapbox/streets-v12',
+    // Was hardcoded to streets-v12 — predated the Navigation Day/Night
+    // theming work elsewhere (RestaurantMap.vue) and never got updated,
+    // so this map alone didn't follow the light/dark toggle. Confirmed
+    // as the actual cause of "the map changes back to an old version"
+    // when switching into edit mode.
+    style: styleForTheme(themeStore.theme).url,
     center: [startAt.longitude, startAt.latitude],
     zoom: props.modelValue ? 14 : 11,
   })
@@ -63,6 +75,11 @@ onMounted(() => {
       .catch(() => {}) // no location yet — the WI fallback view is fine
   }
 })
+
+watch(
+  () => themeStore.theme,
+  (theme) => map?.setStyle(styleForTheme(theme).url), // marker is a DOM overlay, survives a style change untouched
+)
 
 onBeforeUnmount(() => {
   marker?.remove()

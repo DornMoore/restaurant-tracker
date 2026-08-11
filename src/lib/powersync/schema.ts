@@ -65,13 +65,25 @@ const tags = new Table({
   created_at: column.text,
 })
 
+// Generalizes the old fixed yelp_url/tripadvisor_url restaurant columns —
+// any number of named review-site links per restaurant, not just those
+// two. See supabase/migrations/0008_review_links.sql.
+const review_links = new Table({
+  restaurant_id: column.text,
+  label: column.text, // e.g. 'Yelp', 'TripAdvisor', 'Google Reviews', or anything typed in
+  url: column.text,
+  created_at: column.text,
+})
+
 export const AppSchema = new Schema({
   restaurants,
   visits,
   tags,
+  review_links,
 })
 
 export type Database = (typeof AppSchema)['types']
 export type RestaurantRecord = Database['restaurants']
 export type VisitRecord = Database['visits']
 export type TagRecord = Database['tags']
+export type ReviewLinkRecord = Database['review_links']

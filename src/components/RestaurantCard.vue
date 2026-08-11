@@ -23,6 +23,11 @@ const props = withDefaults(
     /** Full address text — city is a best-effort parse of this, not a real
      * structured field. See cityFromLocationLabel(). */
     locationLabel?: string | null
+    /** Your own "About this place" text — takes over from `cuisine` on the
+     * card once it exists, since cuisine is often just Mapbox's raw
+     * category text (e.g. "American restaurant, Food, Food and drink,
+     * Restaurant") until you've cleaned it up. */
+    description?: string | null
   }>(),
   { tags: () => [] },
 )
@@ -34,6 +39,14 @@ const props = withDefaults(
 // reinforcing, never the only signal.
 const accentClass = computed(() => statusBorderClasses(props.status, props.wouldntGoBack))
 const city = computed(() => cityFromLocationLabel(props.locationLabel))
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
+}
+const cuisineOrDescription = computed(() => {
+  const d = props.description?.trim()
+  return d ? truncate(d, 60) : props.cuisine
+})
 </script>
 
 <template>
@@ -54,11 +67,11 @@ const city = computed(() => cityFromLocationLabel(props.locationLabel))
       <p v-else-if="status === 'want_to_try'" class="mt-1 text-sm text-zinc-400 dark:text-zinc-500">Want to try</p>
 
       <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-500">
-        <span v-if="priceTier || cuisine || city">
+        <span v-if="priceTier || cuisineOrDescription || city">
           <template v-if="priceTier">{{ priceTier }}</template>
-          <template v-if="priceTier && cuisine"> · </template>
-          <template v-if="cuisine">{{ cuisine }}</template>
-          <template v-if="(priceTier || cuisine) && city"> · </template>
+          <template v-if="priceTier && cuisineOrDescription"> · </template>
+          <template v-if="cuisineOrDescription">{{ cuisineOrDescription }}</template>
+          <template v-if="(priceTier || cuisineOrDescription) && city"> · </template>
           <template v-if="city">{{ city }}</template>
         </span>
       </div>

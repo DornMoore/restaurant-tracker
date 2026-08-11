@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useQuery, usePowerSync, useStatus } from '@powersync/vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import LocationPicker from '../components/LocationPicker.vue'
 import RestaurantMap from '../components/RestaurantMap.vue'
 import StarRating from '../components/StarRating.vue'
-import { appleMapsUrl, distanceMiles, getCurrentPosition, googleMapsUrl, tripAdvisorUrl, yelpUrl, type Coordinates } from '../lib/geo/location'
+import { appleMapsUrl, distanceMiles, getCurrentPosition, googleMapsUrl, type Coordinates } from '../lib/geo/location'
 import { drivingInfo } from '../lib/mapbox/directions'
 import { CUISINE_OPTIONS } from '../lib/cuisines'
+import { REVIEW_SITE_PRESETS } from '../lib/reviewSites'
 import { uploadRestaurantPhoto } from '../lib/photoUpload'
-import type { RestaurantRecord, VisitRecord, TagRecord } from '../lib/powersync/schema'
+import type { RestaurantRecord, VisitRecord, TagRecord, ReviewLinkRecord } from '../lib/powersync/schema'
 
 const props = defineProps<{ id: string }>()
 const powerSync = usePowerSync()
 const router = useRouter()
+const route = useRoute()
 const status = useStatus()
 
 const { data: restaurantRows } = useQuery<RestaurantRecord>(
@@ -32,16 +34,6 @@ const appleUrl = computed(() =>
       : null,
   ),
 )
-// Manual overrides win — their generated search links don't always land on
-// the right page (confirmed in testing). See PRD.md follow-up.
-const yelpLink = computed(
-  () => restaurant.value?.yelp_url || (restaurant.value && yelpUrl(restaurant.value.name ?? '', restaurant.value.location_label)),
-)
-const tripAdvisorLink = computed(
-  () =>
-    restaurant.value?.tripadvisor_url ||
-    (restaurant.value && tripAdvisorUrl(restaurant.value.name ?? '', restaurant.value.location_label)),
-)
 
 const { data: visits } = useQuery<VisitRecord>(
   `SELECT * FROM visits WHERE restaurant_id = ? ORDER BY visit_date DESC`,
@@ -50,6 +42,17 @@ const { data: visits } = useQuery<VisitRecord>(
 
 const { data: restaurantTags } = useQuery<TagRecord>(
   `SELECT * FROM tags WHERE restaurant_id = ?`,
+  [props.id],
+)
+
+// All distinct tags across every restaurant — small table at this app's
+// scale, no pagination needed — powers the "did we already use this tag?"
+// autocomplete below, so the same idea doesn't get typed slightly
+// differently on different restaurants.
+const { data: allTagLabels } = useQuery<{ label: string }>(`SELECT DISTINCT label FROM tags ORDER BY label`)
+
+const { data: reviewLinks } = useQuery<ReviewLinkRecord>(
+  `SELECT * FROM review_links WHERE restaurant_id = ? ORDER BY created_at`,
   [props.id],
 )
 
@@ -199,14 +202,62 @@ async function saveEdit() {
 
 // --- Tags (freeform, restaurant-level here) ---
 const newTag = ref('')
-async function addTag() {
-  const label = newTag.value.trim()
+const tagSuggestionsOpen = ref(false)
+
+// Existing tags elsewhere, filtered to what's typed so far and excluding
+// anything already on THIS restaurant — see PRD.md follow-up ("shouldn't
+// double create tags"). Same open/blur-delay dropdown pattern as
+// RestaurantSearchInput/LogVisitPicker elsewhere in the app.
+const tagSuggestions = computed(() => {
+  const q = newTag.value.trim().toLowerCase()
+  if (!q) return []
+  const already = new Set(restaurantTags.value.map((t) => t.label?.toLowerCase()))
+  return allTagLabels.value.filter((t) => t.label.toLowerCase().includes(q) && !already.has(t.label.toLowerCase())).slice(0, 8)
+})
+
+async function addTag(labelOverride?: string) {
+  const label = (labelOverride ?? newTag.value).trim()
   if (!label) return
-  await powerSync.value.execute(
-    `INSERT INTO tags (id, label, restaurant_id, created_at) VALUES (uuid(), ?, ?, ?)`,
-    [label, props.id, new Date().toISOString()],
-  )
+  // Guard against creating a near-duplicate on the SAME restaurant (e.g. a
+  // double-submit, or typing something already suggested but ignoring the
+  // dropdown) — a case-insensitive match is close enough here.
+  const already = restaurantTags.value.some((t) => t.label?.toLowerCase() === label.toLowerCase())
+  if (!already) {
+    await powerSync.value.execute(
+      `INSERT INTO tags (id, label, restaurant_id, created_at) VALUES (uuid(), ?, ?, ?)`,
+      [label, props.id, new Date().toISOString()],
+    )
+  }
   newTag.value = ''
+  tagSuggestionsOpen.value = false
+}
+
+function onTagBlur() {
+  setTimeout(() => (tagSuggestionsOpen.value = false), 150)
+}
+
+async function deleteTag(id: string) {
+  await powerSync.value.execute(`DELETE FROM tags WHERE id = ?`, [id])
+}
+
+// --- Edit a tag in place ---
+const editingTagId = ref<string | null>(null)
+const editingTagLabel = ref('')
+
+function startEditTag(tag: TagRecord) {
+  editingTagId.value = tag.id
+  editingTagLabel.value = tag.label ?? ''
+}
+
+async function saveTagEdit() {
+  const label = editingTagLabel.value.trim()
+  if (!editingTagId.value || !label) return
+  await powerSync.value.execute(`UPDATE tags SET label = ? WHERE id = ?`, [label, editingTagId.value])
+  editingTagId.value = null
+}
+
+function cancelTagEdit() {
+  editingTagId.value = null
 }
 
 // --- Edit the restaurant itself ---
@@ -223,8 +274,6 @@ const editDescription = ref('')
 const editLocationLabel = ref('')
 const editWebsite = ref('')
 const editPhone = ref('')
-const editYelpUrl = ref('')
-const editTripAdvisorUrl = ref('')
 const editCoords = ref<Coordinates | null>(null)
 
 function startEditRestaurant() {
@@ -247,8 +296,6 @@ function startEditRestaurant() {
   editLocationLabel.value = restaurant.value.location_label ?? ''
   editWebsite.value = restaurant.value.website ?? ''
   editPhone.value = restaurant.value.phone ?? ''
-  editYelpUrl.value = restaurant.value.yelp_url ?? ''
-  editTripAdvisorUrl.value = restaurant.value.tripadvisor_url ?? ''
   editCoords.value =
     restaurant.value.latitude != null && restaurant.value.longitude != null
       ? { latitude: restaurant.value.latitude, longitude: restaurant.value.longitude }
@@ -262,12 +309,29 @@ function cancelEditRestaurant() {
   editingRestaurant.value = false
 }
 
+// A freshly-added restaurant (see RestaurantsView.vue's onPick()) lands
+// here with ?new=1 — open straight into the edit form (website/phone/
+// review links all visible right away) instead of view mode, where half
+// of that is hidden behind a separate "Edit" click and the most prominent
+// thing on the page would otherwise be the "Log a visit" form below. Runs
+// once, the first time `restaurant` actually has data (it's null/empty
+// until the local query resolves) — then drops the query param so a
+// reload or shared link doesn't keep forcing edit mode back open.
+const stopAutoEditWatch = watch(restaurant, (r) => {
+  if (!r) return
+  if (route.query.new) {
+    startEditRestaurant()
+    router.replace({ name: 'restaurant-detail', params: { id: props.id } })
+  }
+  stopAutoEditWatch()
+})
+
 async function saveRestaurant() {
   const cuisine = editCuisineSelect.value === '__other__' ? editCuisineOther.value.trim() || null : editCuisineSelect.value || null
   await powerSync.value.execute(
     `UPDATE restaurants
      SET name = ?, cuisine = ?, price_tier = ?, description = ?, location_label = ?,
-         website = ?, phone = ?, yelp_url = ?, tripadvisor_url = ?, latitude = ?, longitude = ?, updated_at = ?
+         website = ?, phone = ?, latitude = ?, longitude = ?, updated_at = ?
      WHERE id = ?`,
     [
       editName.value.trim(),
@@ -277,8 +341,6 @@ async function saveRestaurant() {
       editLocationLabel.value.trim() || null,
       editWebsite.value.trim() || null,
       editPhone.value.trim() || null,
-      editYelpUrl.value.trim() || null,
-      editTripAdvisorUrl.value.trim() || null,
       editCoords.value?.latitude ?? null,
       editCoords.value?.longitude ?? null,
       new Date().toISOString(),
@@ -286,6 +348,62 @@ async function saveRestaurant() {
     ],
   )
   editingRestaurant.value = false
+}
+
+// --- Review links (generalizes the old fixed Yelp/TripAdvisor fields) ---
+// Independent add/edit/delete, same "fires immediately, not gated behind
+// the big Save/Cancel" spirit as tags and the photo upload elsewhere in
+// this file. See supabase/migrations/0008_review_links.sql.
+const newLinkLabelSelect = ref('') // one of REVIEW_SITE_PRESETS, '__other__', or ''
+const newLinkLabelOther = ref('')
+const newLinkUrl = ref('')
+const newLinkError = ref<string | null>(null)
+
+async function addReviewLink() {
+  const label = newLinkLabelSelect.value === '__other__' ? newLinkLabelOther.value.trim() : newLinkLabelSelect.value
+  const url = newLinkUrl.value.trim()
+  // Pasting just the URL without picking a site from the dropdown (still
+  // on its blank "Review site…" placeholder) used to silently do nothing
+  // — same silent-no-op pattern as the earlier add-restaurant bug. Now
+  // surfaces an actual message instead of failing invisibly.
+  if (!label || !url) {
+    newLinkError.value = !label ? 'Pick a review site first.' : 'Paste a link too.'
+    return
+  }
+  newLinkError.value = null
+  await powerSync.value.execute(
+    `INSERT INTO review_links (id, restaurant_id, label, url, created_at) VALUES (uuid(), ?, ?, ?, ?)`,
+    [props.id, label, url, new Date().toISOString()],
+  )
+  newLinkLabelSelect.value = ''
+  newLinkLabelOther.value = ''
+  newLinkUrl.value = ''
+}
+
+const editingLinkId = ref<string | null>(null)
+const editingLinkLabel = ref('')
+const editingLinkUrl = ref('')
+
+function startEditReviewLink(link: ReviewLinkRecord) {
+  editingLinkId.value = link.id
+  editingLinkLabel.value = link.label ?? ''
+  editingLinkUrl.value = link.url ?? ''
+}
+
+async function saveReviewLinkEdit() {
+  const label = editingLinkLabel.value.trim()
+  const url = editingLinkUrl.value.trim()
+  if (!editingLinkId.value || !label || !url) return
+  await powerSync.value.execute(`UPDATE review_links SET label = ?, url = ? WHERE id = ?`, [label, url, editingLinkId.value])
+  editingLinkId.value = null
+}
+
+function cancelReviewLinkEdit() {
+  editingLinkId.value = null
+}
+
+async function deleteReviewLink(id: string) {
+  await powerSync.value.execute(`DELETE FROM review_links WHERE id = ?`, [id])
 }
 
 // --- Photo upload ---
@@ -357,6 +475,55 @@ async function deleteRestaurant() {
     </div>
     <p v-if="photoUploadError" class="mt-1 text-sm text-red-500">{{ photoUploadError }}</p>
 
+    <!-- Review links — independent add/edit/delete, visible in both view
+         and edit mode (unlike the fields below, which are gated behind
+         Edit). Any site, any number — nothing shows until you add one;
+         see supabase/migrations/0008_review_links.sql. -->
+    <div class="mt-3">
+      <div v-if="reviewLinks.length" class="flex flex-wrap items-center gap-2 text-sm">
+        <div
+          v-for="link in reviewLinks"
+          :key="link.id"
+          class="flex items-center gap-1 rounded-full border border-zinc-200 px-2 py-0.5 dark:border-zinc-700"
+        >
+          <template v-if="editingLinkId === link.id">
+            <input v-model="editingLinkLabel" type="text" class="w-20 rounded border border-zinc-300 px-1 text-xs dark:border-zinc-700 dark:bg-zinc-900" />
+            <input v-model="editingLinkUrl" type="text" class="w-32 rounded border border-zinc-300 px-1 text-xs dark:border-zinc-700 dark:bg-zinc-900" />
+            <button type="button" class="text-xs text-blue-600 underline" @click="saveReviewLinkEdit">Save</button>
+            <button type="button" class="text-xs text-zinc-500" @click="cancelReviewLinkEdit">Cancel</button>
+          </template>
+          <template v-else>
+            <a :href="link.url ?? undefined" target="_blank" rel="noopener" class="text-blue-600 underline">Open in {{ link.label }}</a>
+            <button type="button" class="text-xs text-zinc-400 underline decoration-dotted" @click="startEditReviewLink(link)">Edit</button>
+            <button type="button" class="text-zinc-400" title="Remove" @click="deleteReviewLink(link.id)">×</button>
+          </template>
+        </div>
+      </div>
+
+      <form class="mt-2 flex flex-wrap items-center gap-2 text-sm" @submit.prevent="addReviewLink">
+        <select v-model="newLinkLabelSelect" class="rounded-lg border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900">
+          <option value="">Review site…</option>
+          <option v-for="s in REVIEW_SITE_PRESETS" :key="s" :value="s">{{ s }}</option>
+          <option value="__other__">Other…</option>
+        </select>
+        <input
+          v-if="newLinkLabelSelect === '__other__'"
+          v-model="newLinkLabelOther"
+          type="text"
+          placeholder="Site name"
+          class="w-24 rounded-lg border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+        />
+        <input
+          v-model="newLinkUrl"
+          type="text"
+          placeholder="Link URL"
+          class="min-w-0 flex-1 rounded-lg border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+        />
+        <button type="submit" class="rounded-lg bg-zinc-100 px-3 py-1 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">+ Add</button>
+      </form>
+      <p v-if="newLinkError" class="mt-1 text-xs text-red-500">{{ newLinkError }}</p>
+    </div>
+
     <template v-if="!editingRestaurant">
       <p class="text-sm text-zinc-500">
         <span v-if="restaurant.cuisine">{{ restaurant.cuisine }} · </span>
@@ -371,18 +538,55 @@ async function deleteRestaurant() {
         <span
           v-for="tag in restaurantTags"
           :key="tag.id"
-          class="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+          class="flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
         >
-          {{ tag.label }}
+          <template v-if="editingTagId === tag.id">
+            <input
+              v-model="editingTagLabel"
+              type="text"
+              autofocus
+              class="w-16 rounded border border-zinc-300 bg-white px-1 dark:border-zinc-700 dark:bg-zinc-900"
+              @keydown.enter.prevent="saveTagEdit"
+              @keydown.escape="cancelTagEdit"
+              @blur="saveTagEdit"
+            />
+          </template>
+          <template v-else>
+            <!-- Click the label to edit it in place; × removes it. -->
+            <button type="button" @click="startEditTag(tag)">{{ tag.label }}</button>
+            <button type="button" class="text-zinc-400" title="Remove tag" @click="deleteTag(tag.id)">×</button>
+          </template>
         </span>
-        <form class="flex gap-1" @submit.prevent="addTag">
-          <input
-            v-model="newTag"
-            type="text"
-            placeholder="+ tag"
-            class="w-20 rounded-full border border-zinc-300 px-2 py-0.5 text-xs dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </form>
+
+        <div class="relative">
+          <form class="flex gap-1" @submit.prevent="addTag()">
+            <input
+              v-model="newTag"
+              type="text"
+              placeholder="+ tag"
+              class="w-20 rounded-full border border-zinc-300 px-2 py-0.5 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+              @input="tagSuggestionsOpen = true"
+              @focus="tagSuggestionsOpen = tagSuggestions.length > 0"
+              @blur="onTagBlur"
+            />
+          </form>
+          <!-- Existing tags matching what's typed — picking one adds it
+               immediately instead of risking a near-duplicate. See PRD.md
+               follow-up ("shouldn't double create tags"). -->
+          <ul
+            v-if="tagSuggestionsOpen && tagSuggestions.length"
+            class="absolute z-10 mt-1 w-32 overflow-hidden rounded-lg border border-zinc-200 bg-white text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <li
+              v-for="s in tagSuggestions"
+              :key="s.label"
+              class="cursor-pointer px-2 py-1 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              @mousedown.prevent="addTag(s.label)"
+            >
+              {{ s.label }}
+            </li>
+          </ul>
+        </div>
       </div>
 
       <p v-if="restaurant.location_label" class="mt-2 text-sm text-zinc-500">{{ restaurant.location_label }}</p>
@@ -394,8 +598,6 @@ async function deleteRestaurant() {
         <a v-if="restaurant.phone" :href="`tel:${restaurant.phone}`" class="text-blue-600 underline">{{ restaurant.phone }}</a>
         <a :href="googleUrl ?? undefined" target="_blank" rel="noopener" class="text-blue-600 underline">Open in Google Maps</a>
         <a :href="appleUrl ?? undefined" target="_blank" rel="noopener" class="text-blue-600 underline">Open in Apple Maps</a>
-        <a :href="yelpLink ?? undefined" target="_blank" rel="noopener" class="text-blue-600 underline">Open in Yelp</a>
-        <a :href="tripAdvisorLink ?? undefined" target="_blank" rel="noopener" class="text-blue-600 underline">Open in TripAdvisor</a>
       </div>
 
       <RestaurantMap class="mt-4" :restaurants="mapPlaces" single-pin />
@@ -455,20 +657,9 @@ async function deleteRestaurant() {
         class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
       />
 
-      <!-- The generated search links (see lib/geo/location.ts) don't always
-           land on the right page — these override them when set. -->
-      <input
-        v-model="editYelpUrl"
-        type="text"
-        placeholder="Yelp URL (optional — overrides the search link)"
-        class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-      />
-      <input
-        v-model="editTripAdvisorUrl"
-        type="text"
-        placeholder="TripAdvisor URL (optional — overrides the search link)"
-        class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-      />
+      <!-- Review links (Yelp/TripAdvisor/etc.) live in their own
+           always-visible section above, not this form — see the "Review
+           links" block near the top of this template. -->
 
       <div class="flex gap-2">
         <button type="button" class="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-50 dark:text-zinc-900" @click="saveRestaurant">

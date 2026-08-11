@@ -6,19 +6,24 @@
 // model change.
 import { computed, onMounted, ref } from 'vue'
 import { useQuery, usePowerSync } from '@powersync/vue'
+import { useRouter } from 'vue-router'
 import { getCurrentPosition, type Coordinates } from '../lib/geo/location'
-import { categoryLabel, type RetrievedPlace } from '../lib/mapbox/searchBox'
+import { categoryLabel } from '../lib/mapbox/searchBox'
+import type { PickedRestaurant } from '../lib/logVisit'
 import RestaurantCard from '../components/RestaurantCard.vue'
 import RestaurantMap from '../components/RestaurantMap.vue'
-import RestaurantSearchInput from '../components/RestaurantSearchInput.vue'
+import LogVisitPicker from '../components/LogVisitPicker.vue'
 
 const powerSync = usePowerSync()
+const router = useRouter()
 
 type ViewMode = 'list' | 'map'
 const viewMode = ref<ViewMode>('list')
 
 type StatusFilter = 'all' | 'want_to_try' | 'been_there'
-const statusFilter = ref<StatusFilter>('all')
+// "Been there" is the more frequent lookup ("have we been here before?")
+// per PRD.md "Key flows" / "Browsing" — defaults to it rather than "All".
+const statusFilter = ref<StatusFilter>('been_there')
 
 type RestaurantRow = {
   id: string
@@ -30,6 +35,7 @@ type RestaurantRow = {
   longitude: number | null
   location_label: string | null
   photo_url: string | null
+  description: string | null
   avg_rating: number | null
   last_visit_date: string | null
   // Whether the most recent visit was flagged "wouldn't go back" — not
@@ -82,7 +88,7 @@ const { data: restaurants } = useQuery<RestaurantRow>(
   `
   SELECT * FROM (
     SELECT r.id, r.name, r.cuisine, r.price_tier, r.status, r.latitude, r.longitude,
-           r.location_label, r.photo_url,
+           r.location_label, r.photo_url, r.description,
            AVG(v.rating) as avg_rating,
            MAX(v.visit_date) as last_visit_date,
            COUNT(v.id) as visit_count,
@@ -202,48 +208,67 @@ const visible = computed(() => {
 // RestaurantMap wants a plain boolean, not SQLite's 0/1/null.
 const mapPlaces = computed(() => visible.value.map((r) => ({ ...r, wouldntGoBack: !!r.last_wouldnt_go_back })))
 
-// --- Quick-add (want-to-try) ---
-// Backed by Mapbox search (see RestaurantSearchInput) — picking a real
-// result disambiguates multi-location chains and captures address/
-// coordinates/website in one step. Falls back to a name-only insert when
-// search can't find it or is unavailable (offline).
-async function addFromSearch(place: RetrievedPlace) {
-  const now = new Date().toISOString()
-  const cuisine = categoryLabel(place.category)
-  await powerSync.value.execute(
-    `INSERT INTO restaurants
-       (id, name, cuisine, status, latitude, longitude, location_label, mapbox_id, website, phone, created_at, updated_at)
-     VALUES (uuid(), ?, ?, 'want_to_try', ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [place.name, cuisine, place.latitude, place.longitude, place.fullAddress, place.mapboxId, place.website, place.phone, now, now],
-  )
-}
+// --- Add a restaurant ---
+// One flow, not two: LogVisitPicker already checks our own restaurants
+// before falling through to Mapbox, so picking an existing match just
+// pulls it up — no silent insert, no duplicate row. A genuinely new place
+// gets added as 'want_to_try' (the neutral "I know this place exists"
+// state) and we navigate straight to its detail page, which already has a
+// full "Log a visit" form — that's where "I've completed adding the
+// restaurant, but I also want to say I was here" gets answered, with no
+// new UI needed. Landing on the detail page also means there's never an
+// "did this actually do anything?" moment: you're looking straight at the
+// thing you just added, regardless of whatever list filter was active.
+async function onPick(p: PickedRestaurant) {
+  if (p.kind === 'existing') {
+    router.push({ name: 'restaurant-detail', params: { id: p.id } })
+    return
+  }
 
-async function addManually(name: string) {
+  // A Mapbox pick can match a restaurant we already have even when
+  // LogVisitPicker's (name-based) existing-match search misses it — e.g.
+  // searching "Culvers Baraboo" to disambiguate a chain won't match a
+  // stored name of just "Culver's". mapbox_id is an exact, unambiguous key
+  // for the same real-world place, so check it before inserting — without
+  // this, picking a "new" Mapbox result for a place already on the list
+  // creates a genuine duplicate row instead of just pulling up the
+  // existing one.
+  if (p.kind === 'new') {
+    const dupes = await powerSync.value.getAll<{ id: string }>(`SELECT id FROM restaurants WHERE mapbox_id = ? LIMIT 1`, [
+      p.place.mapboxId,
+    ])
+    if (dupes.length) {
+      router.push({ name: 'restaurant-detail', params: { id: dupes[0].id } })
+      return
+    }
+  }
+
+  const id = crypto.randomUUID()
   const now = new Date().toISOString()
-  await powerSync.value.execute(
-    `INSERT INTO restaurants (id, name, status, created_at, updated_at)
-     VALUES (uuid(), ?, 'want_to_try', ?, ?)`,
-    [name, now, now],
-  )
+  if (p.kind === 'new') {
+    const cuisine = categoryLabel(p.place.category)
+    powerSync.value.execute(
+      `INSERT INTO restaurants
+         (id, name, cuisine, status, latitude, longitude, location_label, mapbox_id, website, phone, created_at, updated_at)
+       VALUES (?, ?, ?, 'want_to_try', ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, p.place.name, cuisine, p.place.latitude, p.place.longitude, p.place.fullAddress, p.place.mapboxId, p.place.website, p.place.phone, now, now],
+    )
+  } else {
+    powerSync.value.execute(
+      `INSERT INTO restaurants (id, name, status, created_at, updated_at) VALUES (?, ?, 'want_to_try', ?, ?)`,
+      [id, p.name, now, now],
+    )
+  }
+  // ?new=1 tells the detail page to open straight into edit mode instead
+  // of view mode — see RestaurantDetailView.vue's auto-edit watcher.
+  router.push({ name: 'restaurant-detail', params: { id }, query: { new: '1' } })
 }
 </script>
 
 <template>
   <div class="mx-auto max-w-2xl px-4 py-6">
-    <div class="mb-4 flex flex-wrap items-start gap-3">
-      <RestaurantSearchInput
-        placeholder="Place we want to try…"
-        :proximity="here ?? undefined"
-        class="min-w-0 flex-1"
-        @select="addFromSearch"
-        @manual="addManually"
-      />
-      <RouterLink
-        :to="{ name: 'log-visit' }"
-        class="shrink-0 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-50 dark:text-zinc-900"
-      >
-        + Log a visit
-      </RouterLink>
+    <div class="mb-4">
+      <LogVisitPicker placeholder="Add a restaurant…" @pick="onPick" />
     </div>
 
     <input
@@ -381,6 +406,7 @@ async function addManually(name: string) {
           :photo-url="r.photo_url"
           :visit-count="r.visit_count"
           :location-label="r.location_label"
+          :description="r.description"
           :tags="[...(tagsByRestaurant.get(r.id) ?? [])]"
         />
       </RouterLink>

@@ -33,21 +33,6 @@ export function appleMapsUrl(name: string, coords?: Coordinates | null): string 
   return `https://maps.apple.com/?${params}`
 }
 
-// Neither has a public unauthenticated "exact place" deep link the way
-// Google/Apple Maps do — these are search-results links, same spirit as
-// googleMapsUrl above. Usually surfaces the right place near the top.
-
-export function yelpUrl(name: string, address?: string | null): string {
-  const params = new URLSearchParams({ find_desc: name })
-  if (address) params.set('find_loc', address)
-  return `https://www.yelp.com/search?${params}`
-}
-
-export function tripAdvisorUrl(name: string, address?: string | null): string {
-  const query = [name, address].filter(Boolean).join(' ')
-  return `https://www.tripadvisor.com/Search?q=${encodeURIComponent(query)}`
-}
-
 /** Distance in miles between two coordinates (haversine formula). */
 export function distanceMiles(a: Coordinates, b: Coordinates): number {
   const R = 3958.8 // Earth radius, miles

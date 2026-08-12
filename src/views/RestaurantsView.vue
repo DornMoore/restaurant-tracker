@@ -293,10 +293,19 @@ async function onPick(p: PickedRestaurant) {
         </button>
       </div>
 
+      <!-- max-w constrains the CLOSED box — without it, WebKit (the engine
+           iOS Chrome actually uses) sizes an unstyled <select> to fit its
+           WIDEST option, not just the one currently displayed. `cuisines`
+           can include raw, uncurated Mapbox category text ("American
+           restaurant, Food, Food and drink, Restaurant") for anything not
+           yet edited, which was forcing this box wider than the mobile
+           viewport — confirmed via a real WebKit overflow measurement,
+           not a hypothetical. The browser ellipsizes the displayed value
+           on its own once a max-width is set. -->
       <select
         v-if="cuisines.length"
         v-model="cuisineFilter"
-        class="rounded-lg border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+        class="max-w-[9rem] truncate rounded-lg border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
       >
         <option value="">All cuisines</option>
         <option v-for="c in cuisines" :key="c" :value="c">{{ c }}</option>

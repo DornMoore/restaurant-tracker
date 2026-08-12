@@ -501,7 +501,7 @@ async function deleteRestaurant() {
       </div>
 
       <form class="mt-2 flex flex-wrap items-center gap-2 text-sm" @submit.prevent="addReviewLink">
-        <select v-model="newLinkLabelSelect" class="rounded-lg border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900">
+        <select v-model="newLinkLabelSelect" class="max-w-[7rem] truncate rounded-lg border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900">
           <option value="">Review site…</option>
           <option v-for="s in REVIEW_SITE_PRESETS" :key="s" :value="s">{{ s }}</option>
           <option value="__other__">Other…</option>

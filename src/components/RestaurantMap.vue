@@ -419,7 +419,7 @@ onBeforeUnmount(() => {
              PRD.md follow-up. Persists across every map in the app. -->
         <select
           :value="selectedStyleId"
-          class="absolute top-3 left-3 rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+          class="absolute top-3 left-3 max-w-[9rem] truncate rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
           @change="changeBaseStyle(($event.target as HTMLSelectElement).value)"
         >
           <option v-for="s in BASE_MAP_STYLES" :key="s.id" :value="s.id">{{ s.label }}</option>

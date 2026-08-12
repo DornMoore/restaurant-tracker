@@ -397,7 +397,11 @@ async function onPick(p: PickedRestaurant) {
       :has-active-search="!!searchQuery.trim()"
     />
 
-    <div v-else class="grid gap-3 sm:grid-cols-2">
+    <!-- Single column, tight gap — compact rows are meant to be scanned
+         quickly top-to-bottom, not browsed as a photo grid (that grid layout
+         is gone along with the card photos/star ratings; see RestaurantCard
+         and PRD.md follow-up "cards feel a little big"). -->
+    <div v-else class="space-y-2">
       <RouterLink
         v-for="r in visible"
         :key="r.id"
@@ -408,10 +412,8 @@ async function onPick(p: PickedRestaurant) {
           :status="r.status"
           :cuisine="r.cuisine"
           :price-tier="r.price_tier"
-          :avg-rating="r.avg_rating"
           :distance-miles="r.distance_miles"
           :wouldnt-go-back="!!r.last_wouldnt_go_back"
-          :photo-url="r.photo_url"
           :visit-count="r.visit_count"
           :location-label="r.location_label"
           :description="r.description"

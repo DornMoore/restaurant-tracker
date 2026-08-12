@@ -175,10 +175,23 @@ function startEdit(visit: VisitRecord) {
   editRating.value = visit.rating ?? 0
   editNotes.value = visit.notes ?? ''
   editWouldntGoBack.value = !!visit.wouldnt_go_back
+  confirmingDeleteVisitId.value = null
 }
 
 function cancelEdit() {
   editingVisitId.value = null
+}
+
+// --- Delete a visit ---
+// Full CRUD on visit history, not just create/edit — see PRD.md follow-up.
+// Same click-to-confirm pattern as deleteRestaurant() below, scoped to one
+// row instead of a single page-level flag.
+const confirmingDeleteVisitId = ref<string | null>(null)
+
+async function deleteVisit(id: string) {
+  await powerSync.value.execute(`DELETE FROM tags WHERE visit_id = ?`, [id])
+  await powerSync.value.execute(`DELETE FROM visits WHERE id = ?`, [id])
+  confirmingDeleteVisitId.value = null
 }
 
 async function saveEdit() {
@@ -596,8 +609,26 @@ async function deleteRestaurant() {
           Website
         </a>
         <a v-if="restaurant.phone" :href="`tel:${restaurant.phone}`" class="text-blue-600 underline">{{ restaurant.phone }}</a>
-        <a :href="googleUrl ?? undefined" target="_blank" rel="noopener" class="text-blue-600 underline">Open in Google Maps</a>
-        <a :href="appleUrl ?? undefined" target="_blank" rel="noopener" class="text-blue-600 underline">Open in Apple Maps</a>
+        <!-- Chips, not text links — and Apple first since that's the one
+             most-used day to day. See PRD.md follow-up. -->
+        <a
+          :href="appleUrl ?? undefined"
+          target="_blank"
+          rel="noopener"
+          class="inline-flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1 font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        >
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C7.6 2 4 5.6 4 10c0 5.4 7 11.5 7.3 11.7.2.2.5.3.7.3s.5-.1.7-.3C13 21.5 20 15.4 20 10c0-4.4-3.6-8-8-8zm0 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/></svg>
+          Apple Maps
+        </a>
+        <a
+          :href="googleUrl ?? undefined"
+          target="_blank"
+          rel="noopener"
+          class="inline-flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1 font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        >
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C7.6 2 4 5.6 4 10c0 5.4 7 11.5 7.3 11.7.2.2.5.3.7.3s.5-.1.7-.3C13 21.5 20 15.4 20 10c0-4.4-3.6-8-8-8zm0 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/></svg>
+          Google Maps
+        </a>
       </div>
 
       <RestaurantMap class="mt-4" :restaurants="mapPlaces" single-pin />
@@ -759,11 +790,24 @@ async function deleteRestaurant() {
               <div class="flex items-center gap-2">
                 <span class="text-amber-400">{{ '★'.repeat(visit.rating ?? 0) }}</span>
                 <button type="button" class="text-xs text-zinc-500 dark:text-zinc-300 underline" @click="startEdit(visit)">Edit</button>
+                <button
+                  type="button"
+                  class="text-xs text-red-500 underline"
+                  @click="confirmingDeleteVisitId = confirmingDeleteVisitId === visit.id ? null : visit.id"
+                >
+                  Delete
+                </button>
               </div>
             </div>
             <p v-if="visit.items_ordered" class="mt-1 text-zinc-600 dark:text-zinc-300">{{ visit.items_ordered }}</p>
             <p v-if="visit.notes" class="mt-1 text-zinc-500 dark:text-zinc-300">{{ visit.notes }}</p>
             <p v-if="visit.wouldnt_go_back" class="mt-1 font-medium text-red-500">Wouldn't go back</p>
+
+            <div v-if="confirmingDeleteVisitId === visit.id" class="mt-2 flex items-center gap-2 rounded-lg bg-red-50 p-2 text-red-700 dark:bg-red-950/40 dark:text-red-400">
+              <span>Delete this visit?</span>
+              <button type="button" class="rounded-lg bg-red-600 px-2 py-1 text-xs text-white" @click="deleteVisit(visit.id)">Yes, delete</button>
+              <button type="button" class="text-xs text-zinc-500 dark:text-zinc-300" @click="confirmingDeleteVisitId = null">Cancel</button>
+            </div>
           </template>
         </li>
       </ul>

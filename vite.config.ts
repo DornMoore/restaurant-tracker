@@ -19,15 +19,21 @@ export default defineConfig({
         background_color: '#18181b',
         display: 'standalone',
         start_url: '/',
-        // TODO: swap in real 192/512 PNGs (and an apple-touch-icon for iOS's
-        // add-to-home-screen, which ignores manifest icons) before this
-        // matters for real — the SVG placeholder is enough to make the app
-        // installable in the meantime.
         icons: [
           {
             src: 'favicon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
+          },
+          {
+            src: 'icons/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+          },
+          {
+            src: 'icons/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
           },
         ],
       },

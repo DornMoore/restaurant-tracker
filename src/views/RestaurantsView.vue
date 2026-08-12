@@ -115,7 +115,6 @@ const { data: restaurants } = useQuery<RestaurantRow>(
   queryParams,
 )
 
-const cuisineFilter = ref('')
 const searchQuery = ref('')
 // Default hidden — see PRD.md follow-up ("most of the time, you're not
 // going to want to see them"). Search always overrides this: a deliberate
@@ -131,17 +130,17 @@ const showBeenThereFilters = computed(() => statusFilter.value !== 'want_to_try'
 const priceFilter = ref<Set<string>>(new Set())
 const tagFilter = ref<Set<string>>(new Set())
 const fourPlusOnly = ref(false)
+// Collapsed by default — with enough tags on the list, the chip row got
+// long enough to be genuinely disruptive, especially above the map. A
+// "Filter" toggle reveals it on request instead.
+const showFilters = ref(false)
+const activeFilterCount = computed(() => priceFilter.value.size + tagFilter.value.size + (fourPlusOnly.value ? 1 : 0))
 
 function toggleInSet(set: Set<string>, value: string) {
   const next = new Set(set)
   next.has(value) ? next.delete(value) : next.add(value)
   return next
 }
-
-const cuisines = computed(() => {
-  const set = new Set(restaurants.value.map((r) => r.cuisine).filter((c): c is string => !!c))
-  return [...set].sort()
-})
 
 const priceTiers = computed(() => {
   const set = new Set(restaurants.value.map((r) => r.price_tier).filter((p): p is string => !!p))
@@ -178,9 +177,6 @@ const visible = computed(() => {
   let list: RestaurantRow[] = [...restaurants.value]
   if (statusFilter.value !== 'all') {
     list = list.filter((r) => r.status === statusFilter.value)
-  }
-  if (cuisineFilter.value) {
-    list = list.filter((r) => r.cuisine === cuisineFilter.value)
   }
   if (showBeenThereFilters.value && priceFilter.value.size) {
     list = list.filter((r) => r.price_tier != null && priceFilter.value.has(r.price_tier))
@@ -293,23 +289,22 @@ async function onPick(p: PickedRestaurant) {
         </button>
       </div>
 
-      <!-- max-w constrains the CLOSED box — without it, WebKit (the engine
-           iOS Chrome actually uses) sizes an unstyled <select> to fit its
-           WIDEST option, not just the one currently displayed. `cuisines`
-           can include raw, uncurated Mapbox category text ("American
-           restaurant, Food, Food and drink, Restaurant") for anything not
-           yet edited, which was forcing this box wider than the mobile
-           viewport — confirmed via a real WebKit overflow measurement,
-           not a hypothetical. The browser ellipsizes the displayed value
-           on its own once a max-width is set. -->
-      <select
-        v-if="cuisines.length"
-        v-model="cuisineFilter"
-        class="max-w-[9rem] truncate rounded-lg border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+      <!-- Cuisine filtering relied on Mapbox's auto-categorized text, which
+           isn't trusted as a filtering signal — tags (fully manual, fully
+           curated) are the intended replacement, not a resurrected cuisine
+           picker. -->
+
+      <!-- Collapsed by default (see showFilters) — reveals the price/tag/
+           4+ stars row below on request instead of always showing it. -->
+      <button
+        v-if="showBeenThereFilters && (priceTiers.length || allTags.length)"
+        type="button"
+        class="rounded-full border px-3 py-1"
+        :class="showFilters || activeFilterCount ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-50 dark:bg-zinc-50 dark:text-zinc-900' : 'border-zinc-300 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300'"
+        @click="showFilters = !showFilters"
       >
-        <option value="">All cuisines</option>
-        <option v-for="c in cuisines" :key="c" :value="c">{{ c }}</option>
-      </select>
+        Filter{{ activeFilterCount ? ` (${activeFilterCount})` : '' }}
+      </button>
 
       <button
         v-if="!searchQuery"
@@ -322,9 +317,13 @@ async function onPick(p: PickedRestaurant) {
     </div>
 
     <!-- Price / tag / 4+ stars — only meaningful once there's been-there
-         data to filter on (see showBeenThereFilters). OR within each chip
-         group, AND across groups and the other filters above. -->
-    <div v-if="showBeenThereFilters && (priceTiers.length || allTags.length)" class="mb-4 flex flex-wrap items-center gap-2 text-sm">
+         data to filter on (see showBeenThereFilters), and only shown once
+         the Filter button above is clicked (see showFilters). OR within
+         each chip group, AND across groups and the other filters above. -->
+    <div
+      v-if="showFilters && showBeenThereFilters && (priceTiers.length || allTags.length)"
+      class="mb-4 flex flex-wrap items-center gap-2 text-sm"
+    >
       <button
         v-for="p in priceTiers"
         :key="p"

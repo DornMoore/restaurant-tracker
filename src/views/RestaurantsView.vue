@@ -286,7 +286,7 @@ async function onPick(p: PickedRestaurant) {
           :key="opt"
           type="button"
           class="px-3 py-1"
-          :class="statusFilter === opt ? 'bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900' : 'text-zinc-500'"
+          :class="statusFilter === opt ? 'bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900' : 'text-zinc-500 dark:text-zinc-300'"
           @click="statusFilter = opt"
         >
           {{ opt === 'all' ? 'All' : opt === 'want_to_try' ? 'Want to try' : 'Been there' }}
@@ -314,7 +314,7 @@ async function onPick(p: PickedRestaurant) {
       <button
         v-if="!searchQuery"
         type="button"
-        class="text-zinc-500 underline decoration-dotted"
+        class="text-zinc-500 dark:text-zinc-300 underline decoration-dotted"
         @click="showSkipped = !showSkipped"
       >
         {{ showSkipped ? "Hide places we wouldn't go back" : "Show places we wouldn't go back" }}
@@ -363,7 +363,7 @@ async function onPick(p: PickedRestaurant) {
         <button
           type="button"
           class="px-3 py-1"
-          :class="viewMode === 'list' ? 'bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900' : 'text-zinc-500'"
+          :class="viewMode === 'list' ? 'bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900' : 'text-zinc-500 dark:text-zinc-300'"
           @click="viewMode = 'list'"
         >
           List
@@ -371,7 +371,7 @@ async function onPick(p: PickedRestaurant) {
         <button
           type="button"
           class="px-3 py-1"
-          :class="viewMode === 'map' ? 'bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900' : 'text-zinc-500'"
+          :class="viewMode === 'map' ? 'bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900' : 'text-zinc-500 dark:text-zinc-300'"
           @click="viewMode = 'map'"
         >
           Map
@@ -382,7 +382,7 @@ async function onPick(p: PickedRestaurant) {
       <span v-else-if="locationError" class="text-red-500">{{ locationError }}</span>
     </div>
 
-    <div v-if="visible.length === 0" class="text-sm text-zinc-500">
+    <div v-if="visible.length === 0" class="text-sm text-zinc-500 dark:text-zinc-300">
       <template v-if="searchQuery">No restaurants match "{{ searchQuery }}".</template>
       <template v-else-if="restaurants.length === 0">Nothing on the list yet — add a place above.</template>
       <template v-else>

@@ -450,13 +450,13 @@ async function deleteRestaurant() {
 
 <template>
   <div v-if="restaurant" class="mx-auto max-w-2xl px-4 py-6">
-    <RouterLink :to="{ name: 'restaurants' }" class="text-sm text-zinc-500">
+    <RouterLink :to="{ name: 'restaurants' }" class="text-sm text-zinc-500 dark:text-zinc-300">
       ← Back
     </RouterLink>
 
     <div class="flex items-start justify-between gap-2">
       <h1 class="mt-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">{{ restaurant.name }}</h1>
-      <button v-if="!editingRestaurant" type="button" class="mt-2 shrink-0 text-xs text-zinc-500 underline" @click="startEditRestaurant">
+      <button v-if="!editingRestaurant" type="button" class="mt-2 shrink-0 text-xs text-zinc-500 dark:text-zinc-300 underline" @click="startEditRestaurant">
         Edit
       </button>
     </div>
@@ -465,7 +465,7 @@ async function deleteRestaurant() {
 
     <div class="mt-2 flex items-center gap-2 text-sm">
       <label
-        class="cursor-pointer text-zinc-500 underline decoration-dotted"
+        class="cursor-pointer text-zinc-500 dark:text-zinc-300 underline decoration-dotted"
         :class="{ 'cursor-not-allowed opacity-50': !status.connected || uploadingPhoto }"
       >
         {{ uploadingPhoto ? 'Uploading…' : restaurant.photo_url ? 'Replace photo' : 'Add a photo' }}
@@ -490,7 +490,7 @@ async function deleteRestaurant() {
             <input v-model="editingLinkLabel" type="text" class="w-20 rounded border border-zinc-300 px-1 text-xs dark:border-zinc-700 dark:bg-zinc-900" />
             <input v-model="editingLinkUrl" type="text" class="w-32 rounded border border-zinc-300 px-1 text-xs dark:border-zinc-700 dark:bg-zinc-900" />
             <button type="button" class="text-xs text-blue-600 underline" @click="saveReviewLinkEdit">Save</button>
-            <button type="button" class="text-xs text-zinc-500" @click="cancelReviewLinkEdit">Cancel</button>
+            <button type="button" class="text-xs text-zinc-500 dark:text-zinc-300" @click="cancelReviewLinkEdit">Cancel</button>
           </template>
           <template v-else>
             <a :href="link.url ?? undefined" target="_blank" rel="noopener" class="text-blue-600 underline">Open in {{ link.label }}</a>
@@ -525,7 +525,7 @@ async function deleteRestaurant() {
     </div>
 
     <template v-if="!editingRestaurant">
-      <p class="text-sm text-zinc-500">
+      <p class="text-sm text-zinc-500 dark:text-zinc-300">
         <span v-if="restaurant.cuisine">{{ restaurant.cuisine }} · </span>
         <span v-if="restaurant.price_tier">{{ restaurant.price_tier }}</span>
         <span v-if="distanceText">
@@ -589,7 +589,7 @@ async function deleteRestaurant() {
         </div>
       </div>
 
-      <p v-if="restaurant.location_label" class="mt-2 text-sm text-zinc-500">{{ restaurant.location_label }}</p>
+      <p v-if="restaurant.location_label" class="mt-2 text-sm text-zinc-500 dark:text-zinc-300">{{ restaurant.location_label }}</p>
 
       <div class="mt-3 flex flex-wrap gap-3 text-sm">
         <a v-if="restaurant.website" :href="restaurant.website" target="_blank" rel="noopener" class="text-blue-600 underline">
@@ -665,7 +665,7 @@ async function deleteRestaurant() {
         <button type="button" class="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-50 dark:text-zinc-900" @click="saveRestaurant">
           Save
         </button>
-        <button type="button" class="rounded-lg px-4 py-2 text-sm text-zinc-500" @click="cancelEditRestaurant">Cancel</button>
+        <button type="button" class="rounded-lg px-4 py-2 text-sm text-zinc-500 dark:text-zinc-300" @click="cancelEditRestaurant">Cancel</button>
       </div>
 
       <div class="rounded-lg border border-red-200 p-3 dark:border-red-900/50">
@@ -678,7 +678,7 @@ async function deleteRestaurant() {
           </p>
           <div class="mt-2 flex gap-2">
             <button type="button" class="rounded-lg bg-red-600 px-3 py-1.5 text-white" @click="deleteRestaurant">Yes, delete</button>
-            <button type="button" class="rounded-lg px-3 py-1.5 text-zinc-500" @click="confirmingDelete = false">Cancel</button>
+            <button type="button" class="rounded-lg px-3 py-1.5 text-zinc-500 dark:text-zinc-300" @click="confirmingDelete = false">Cancel</button>
           </div>
         </div>
       </div>
@@ -695,7 +695,7 @@ async function deleteRestaurant() {
           class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         />
         <div class="flex items-center gap-2">
-          <span class="text-sm text-zinc-500">Rating:</span>
+          <span class="text-sm text-zinc-500 dark:text-zinc-300">Rating:</span>
           <StarRating v-model="rating" />
         </div>
         <textarea
@@ -716,7 +716,7 @@ async function deleteRestaurant() {
 
     <section class="mt-6">
       <h2 class="mb-3 text-sm font-medium text-zinc-900 dark:text-zinc-50">Visit history</h2>
-      <p v-if="visits.length === 0" class="text-sm text-zinc-500">No visits logged yet.</p>
+      <p v-if="visits.length === 0" class="text-sm text-zinc-500 dark:text-zinc-300">No visits logged yet.</p>
       <ul class="space-y-3">
         <li
           v-for="visit in visits"
@@ -732,7 +732,7 @@ async function deleteRestaurant() {
               class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
             <div class="flex items-center gap-2">
-              <span class="text-zinc-500">Rating:</span>
+              <span class="text-zinc-500 dark:text-zinc-300">Rating:</span>
               <StarRating v-model="editRating" />
             </div>
             <textarea
@@ -749,7 +749,7 @@ async function deleteRestaurant() {
               <button type="submit" class="rounded-lg bg-zinc-900 px-3 py-1.5 text-white dark:bg-zinc-50 dark:text-zinc-900">
                 Save
               </button>
-              <button type="button" class="rounded-lg px-3 py-1.5 text-zinc-500" @click="cancelEdit">Cancel</button>
+              <button type="button" class="rounded-lg px-3 py-1.5 text-zinc-500 dark:text-zinc-300" @click="cancelEdit">Cancel</button>
             </div>
           </form>
 
@@ -758,16 +758,16 @@ async function deleteRestaurant() {
               <span class="font-medium text-zinc-900 dark:text-zinc-50">{{ visit.visit_date }}</span>
               <div class="flex items-center gap-2">
                 <span class="text-amber-400">{{ '★'.repeat(visit.rating ?? 0) }}</span>
-                <button type="button" class="text-xs text-zinc-500 underline" @click="startEdit(visit)">Edit</button>
+                <button type="button" class="text-xs text-zinc-500 dark:text-zinc-300 underline" @click="startEdit(visit)">Edit</button>
               </div>
             </div>
             <p v-if="visit.items_ordered" class="mt-1 text-zinc-600 dark:text-zinc-300">{{ visit.items_ordered }}</p>
-            <p v-if="visit.notes" class="mt-1 text-zinc-500">{{ visit.notes }}</p>
+            <p v-if="visit.notes" class="mt-1 text-zinc-500 dark:text-zinc-300">{{ visit.notes }}</p>
             <p v-if="visit.wouldnt_go_back" class="mt-1 font-medium text-red-500">Wouldn't go back</p>
           </template>
         </li>
       </ul>
     </section>
   </div>
-  <div v-else class="mx-auto max-w-2xl px-4 py-6 text-sm text-zinc-500">Restaurant not found.</div>
+  <div v-else class="mx-auto max-w-2xl px-4 py-6 text-sm text-zinc-500 dark:text-zinc-300">Restaurant not found.</div>
 </template>

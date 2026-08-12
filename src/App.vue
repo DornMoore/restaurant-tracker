@@ -48,7 +48,7 @@ onMounted(async () => {
         <div class="flex items-center gap-3">
           <!-- Also picks Navigation Day/Night as the basemap on any open
                map — see PRD.md follow-up ("our two main basemaps"). -->
-          <button type="button" class="text-xs text-zinc-500" :title="theme.theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="theme.toggle()">
+          <button type="button" class="text-xs text-zinc-500 dark:text-zinc-300" :title="theme.theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="theme.toggle()">
             {{ theme.theme === 'dark' ? '🌙' : '☀️' }}
           </button>
           <span
@@ -59,10 +59,10 @@ onMounted(async () => {
           >
             {{ status.connected ? (status.uploading || status.downloading ? 'Syncing…' : 'Synced') : 'Offline' }}
           </span>
-          <RouterLink v-if="!auth.isLoggedIn" :to="{ name: 'login' }" class="text-xs text-zinc-500 underline">
+          <RouterLink v-if="!auth.isLoggedIn" :to="{ name: 'login' }" class="text-xs text-zinc-500 dark:text-zinc-300 underline">
             Sign in
           </RouterLink>
-          <button v-else type="button" class="text-xs text-zinc-500 underline" @click="onLogout">
+          <button v-else type="button" class="text-xs text-zinc-500 dark:text-zinc-300 underline" @click="onLogout">
             Sign out
           </button>
         </div>

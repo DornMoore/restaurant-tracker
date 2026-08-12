@@ -138,7 +138,7 @@ onBeforeUnmount(() => clearTimeout(debounceHandle))
           @mousedown.prevent="pickExisting(m)"
         >
           <div class="text-zinc-900 dark:text-zinc-50">{{ m.name }}</div>
-          <div class="text-xs text-zinc-500">
+          <div class="text-xs text-zinc-500 dark:text-zinc-300">
             {{ m.last_visit_date ? `Last visited ${m.last_visit_date}` : m.status === 'want_to_try' ? 'Want to try — no visits yet' : 'No visits yet' }}
           </div>
         </li>
@@ -153,15 +153,15 @@ onBeforeUnmount(() => clearTimeout(debounceHandle))
           @mousedown.prevent="pickSuggestion(s)"
         >
           <div class="text-zinc-900 dark:text-zinc-50">{{ s.name }}</div>
-          <div class="text-xs text-zinc-500">{{ s.fullAddress }}</div>
+          <div class="text-xs text-zinc-500 dark:text-zinc-300">{{ s.fullAddress }}</div>
         </li>
       </template>
 
-      <li v-if="searchError" class="px-3 py-2 text-zinc-500">{{ searchError }}</li>
+      <li v-if="searchError" class="px-3 py-2 text-zinc-500 dark:text-zinc-300">{{ searchError }}</li>
 
       <li
         v-if="query.trim().length >= 2"
-        class="cursor-pointer border-t border-zinc-100 px-3 py-2 text-zinc-500 dark:border-zinc-800"
+        class="cursor-pointer border-t border-zinc-100 px-3 py-2 text-zinc-500 dark:text-zinc-300 dark:border-zinc-800"
         @mousedown.prevent="submitManual"
       >
         Can't find it? Add "{{ query.trim() }}" as typed

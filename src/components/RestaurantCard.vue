@@ -62,11 +62,11 @@ const cuisineOrDescription = computed(() => {
     <div class="p-4">
       <h3 class="font-medium text-zinc-900 dark:text-zinc-50">{{ name }}</h3>
 
-      <p v-if="wouldntGoBack" class="mt-1 text-sm font-medium text-zinc-500">Wouldn't go back</p>
+      <p v-if="wouldntGoBack" class="mt-1 text-sm font-medium text-zinc-500 dark:text-zinc-300">Wouldn't go back</p>
       <StarRating v-else-if="avgRating != null" :model-value="Math.round(avgRating)" readonly class="mt-1" />
-      <p v-else-if="status === 'want_to_try'" class="mt-1 text-sm text-zinc-400 dark:text-zinc-500">Want to try</p>
+      <p v-else-if="status === 'want_to_try'" class="mt-1 text-sm text-zinc-400 dark:text-zinc-300">Want to try</p>
 
-      <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-500">
+      <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-500 dark:text-zinc-300">
         <span v-if="priceTier || cuisineOrDescription || city">
           <template v-if="priceTier">{{ priceTier }}</template>
           <template v-if="priceTier && cuisineOrDescription"> · </template>
@@ -76,7 +76,7 @@ const cuisineOrDescription = computed(() => {
         </span>
       </div>
 
-      <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-500">
+      <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-500 dark:text-zinc-300">
         <span v-if="distanceMiles != null">{{ distanceMiles.toFixed(1) }} mi</span>
         <span v-if="visitCount">Visited {{ visitCount }} {{ visitCount === 1 ? 'time' : 'times' }}</span>
       </div>

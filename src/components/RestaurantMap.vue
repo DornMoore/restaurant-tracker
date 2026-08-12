@@ -407,7 +407,7 @@ onBeforeUnmount(() => {
        had no coordinates yet, since the container div wouldn't exist for
        Mapbox to attach to.) -->
   <div>
-    <div v-show="!hasLocatedRestaurants" class="flex h-64 items-center justify-center rounded-xl border border-zinc-200 text-sm text-zinc-500 dark:border-zinc-800">
+    <div v-show="!hasLocatedRestaurants" class="flex h-64 items-center justify-center rounded-xl border border-zinc-200 text-sm text-zinc-500 dark:text-zinc-300 dark:border-zinc-800">
       Nothing with a location yet.
     </div>
 
@@ -426,7 +426,7 @@ onBeforeUnmount(() => {
         </select>
       </div>
 
-      <div class="mt-2 flex items-center gap-2 text-xs text-zinc-500">
+      <div class="mt-2 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-300">
         <span v-if="locating">Finding you…</span>
         <span v-else-if="locationError">{{ locationError }}</span>
         <template v-else-if="areaFilterIds">
@@ -438,7 +438,7 @@ onBeforeUnmount(() => {
       <!-- Compact linked list — hover highlights the matching pin, click
            opens it, same as tapping the pin itself. See PRD.md follow-up. -->
       <ul class="mt-2 max-h-48 divide-y divide-zinc-100 overflow-y-auto rounded-lg border border-zinc-200 text-sm dark:divide-zinc-800 dark:border-zinc-800">
-        <li v-if="displayedRestaurants.length === 0" class="px-3 py-2 text-zinc-500">Nothing in this area.</li>
+        <li v-if="displayedRestaurants.length === 0" class="px-3 py-2 text-zinc-500 dark:text-zinc-300">Nothing in this area.</li>
         <li
           v-for="r in displayedRestaurants"
           :key="r.id"

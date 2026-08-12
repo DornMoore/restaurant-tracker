@@ -90,7 +90,7 @@ onBeforeUnmount(() => {
 <template>
   <div>
     <div ref="container" class="h-56 w-full rounded-xl" />
-    <p class="mt-1 text-xs text-zinc-500">
+    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-300">
       {{ modelValue ? 'Drag the pin or click elsewhere to move it.' : 'Click the map to set this place\'s location.' }}
     </p>
   </div>
